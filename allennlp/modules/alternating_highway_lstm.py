@@ -67,7 +67,7 @@ class _AlternatingHighwayLSTMFunction(Function):
                 c_final = memory_accumulator[l].view(-1, self.hidden_size).index_select(0, last_time_index)
             else:
                 h_final = state_accumulator[l, 1]
-                c_final = state_accumulator[l, 1]
+                c_final = memory_accumulator[l, 1]
 
             final_hs.append(h_final)
             final_cs.append(c_final)

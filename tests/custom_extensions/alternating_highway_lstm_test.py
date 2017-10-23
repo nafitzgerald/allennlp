@@ -39,15 +39,21 @@ class TestCustomHighwayLSTM(AllenNlpTestCase):
                                            baseline_input, kernel_input, lengths):
 
         packed_baseline_input = pack_padded_sequence(baseline_input, lengths, batch_first=True)
-        baseline_output, _ = baseline_model(packed_baseline_input)
+        baseline_output, baseline_final_tuple = baseline_model(packed_baseline_input)
         baseline_output, _ = pad_packed_sequence(baseline_output, batch_first=True)
+        baseline_final_hs, baseline_final_cs = baseline_final_tuple
 
         packed_kernel_input = pack_padded_sequence(kernel_input, lengths, batch_first=True)
-        kernel_output, _ = kernel_model(packed_kernel_input)
+        kernel_output, kernel_final_tuple = kernel_model(packed_kernel_input)
         kernel_output, _ = pad_packed_sequence(kernel_output, batch_first=True)
+        kernel_final_hs, kernel_final_cs = kernel_final_tuple
 
         numpy.testing.assert_array_almost_equal(baseline_output.data.cpu().numpy(),
                                                 kernel_output.data.cpu().numpy())
+        numpy.testing.assert_array_almost_equal(baseline_final_hs.data.cpu().numpy(),
+                                                kernel_final_hs.data.cpu().numpy())
+        numpy.testing.assert_array_almost_equal(baseline_final_cs.data.cpu().numpy(),
+                                                kernel_final_cs.data.cpu().numpy())
 
         # Backprop some random error.
         random_error = torch.randn(baseline_output.size()).cuda()
