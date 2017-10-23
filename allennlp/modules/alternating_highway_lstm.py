@@ -56,10 +56,29 @@ class _AlternatingHighwayLSTMFunction(Function):
         # so for the output, we want the last layer and all but the first timestep, which was the
         # initial state.
         output = state_accumulator[-1, 1:, :, :]
-        return output, state_accumulator[:, 1:, :, :]
+
+        final_hs = []
+        final_cs = []
+        last_time_index = torch.arange(0, batch_size * (sequence_length+1), sequence_length+1).long() + lengths.long()
+        last_time_index = last_time_index.cuda()
+        for l in range(self.num_layers):
+            if l % 2 == 0:
+                h_final = state_accumulator[l].view(-1, self.hidden_size).index_select(0, last_time_index)
+                c_final = memory_accumulator[l].view(-1, self.hidden_size).index_select(0, last_time_index)
+            else:
+                h_final = state_accumulator[l, 1]
+                c_final = state_accumulator[l, 1]
+
+            final_hs.append(h_final)
+            final_cs.append(c_final)
+
+        final_hs = torch.stack(final_hs)
+        final_cs = torch.stack(final_cs)
+
+        return output, final_hs, final_cs
 
     @overrides
-    def backward(self, grad_output, grad_hy):  # pylint: disable=arguments-differ
+    def backward(self, grad_output, grad_hy, grad_cy):  # pylint: disable=arguments-differ
 
         (inputs, lengths, weight, bias, state_accumulator,  # pylint: disable=unpacking-non-sequence
          memory_accumulator, dropout_mask, gates) = self.saved_tensors
@@ -251,11 +270,9 @@ class AlternatingHighwayLSTM(torch.nn.Module):
                                                          self.hidden_size,
                                                          num_layers=self.num_layers,
                                                          train=self.training)
-        output, _ = implementation(inputs, self.weight, self.bias, state_accumulator,
+        output, final_h, final_c = implementation(inputs, self.weight, self.bias, state_accumulator,
                                    memory_accumulator, dropout_weights, lengths_variable, gates)
 
-        # TODO(Mark): Also return the state here by using index_select with the lengths so we can use
-        # it as a Seq2VecEncoder.
         output = output.transpose(0, 1)
         output = pack_padded_sequence(output, lengths, batch_first=True)
-        return output, None
+        return output, (final_h, final_c)
